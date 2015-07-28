@@ -2,6 +2,9 @@
 # -*- coding: utf-8 -*-
 import Tkinter as tk
 
+charKeyMap = {"r": "Red", "b": "Blue", "t": "Three", "p": "Plus", "z": "Undo"}
+baseBlocks = {"Red", "Blue", "Three"}
+
 class Game:
     def __init__(self):
         self.lastMoves = [None] * 4
@@ -9,9 +12,7 @@ class Game:
         self.moves = 0
         self.colorCount = 8
         
-        self.reds = 0
-        self.blues = 0
-        self.threes = 0
+        self.baseBlockCount = {"Red": 0, "Blue": 0, "Three": 0};
         
         self.foundplus = True
         
@@ -26,44 +27,30 @@ class Game:
         self.lastMoves.pop()
          
     def processMove(self, key):
-        if ((key == 'Red') | (key == 'Blue') | (key == 'Three')):
+        if (key in baseBlocks):
             self.colorCount += 1
             self.moves += 1
-            if (key == 'Red'):
-                self.reds += 1
-            elif (key == 'Blue'):
-                self.blues += 1
-            else:
-                self.threes += 1
+            self.baseBlockCount[key] += 1
             self.recordLast(key)
-        elif (key == 'Plus'):
+        elif (key == "Plus"):
             self.foundplus = True
             self.recordLast(key)
-        elif (key == 'Undo'):
-            self.undo()
-        
-        
+        elif (key == "Undo"):
+            self.undo() 
         
         if ((self.moves % 21 == 0) & (self.moves != 0)):
             self.foundplus = False
             
         if (self.colorCount % 12 == 0):
-            self.reds = 0
-            self.blues = 0
-            self.threes = 0
+            self.baseBlockCount = {"Red": 0, "Blue": 0, "Three": 0};
             
     def undo(self):
         move = self.lastMoves[0]
-        if ((move == 'Red') | (move == 'Blue') | (move == 'Three')):
+        if (move in baseBlocks):
             self.colorCount -= 1
             self.moves -= 1
-            if (move == 'Red'):
-                self.reds -= 1
-            elif (move == 'Blue'):
-                self.blues -= 1
-            else:
-                self.threes -= 1
-        elif (move == 'Plus'):
+            self.baseBlockCount[move] -= 1
+        elif (move == "Plus"):
             self.foundplus = False
         self.lastMoves.pop(0)
         self.lastMoves.append(None)
@@ -71,9 +58,8 @@ class Game:
     def colorState(self):
         s = ""
         if(self.colorCount >= 12):
-            s = "Reds: " + str(4 - self.reds) + "\n"
-            s += "Blues: " + str(4 - self.blues) + "\n"
-            s += "Threes: " + str(4 - self.threes) + "\n"
+            for color, count in self.baseBlockCount.items():
+                s += color + ": " + str(4 - count) + "\n"
         else:
             s = "Red/Blue/Threes depend on starting position\n"
         return s
@@ -88,27 +74,16 @@ class Game:
     
 
 def onKeyPress(event):
-    if (event.char == 'r'):
-        key = "Red"
-    elif (event.char == 'b'):
-        key = "Blue"
-    elif (event.char == 't'):
-        key = "Three"
-    elif (event.char == 'p'):
-        key = "Plus"
-    elif (event.char == 'z'):
-        key = "Undo"
-    else:
-        return
-    game.processMove(key)
-    text.delete(1.0, 'end')
-    text.insert('end', '%s\n' % str(game))
+    if (event.char in charKeyMap):
+        game.processMove(charKeyMap[event.char])
+        text.delete(1.0, "end")
+        text.insert("end", "%s\n" % str(game))
 
 game = Game()
 root = tk.Tk()
-root.geometry('350x200')
-text = tk.Text(root, background='black', foreground='white', font=('Comic Sans MS', 12))
+root.geometry("350x200")
+text = tk.Text(root, background="black", foreground="white", font=("Comic Sans MS", 12))
 text.pack()
-root.bind('<KeyPress>', onKeyPress)
+root.bind("<KeyPress>", onKeyPress)
 root.wm_title("Threes Companion")
 root.mainloop()
