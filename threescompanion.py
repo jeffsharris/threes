@@ -103,12 +103,15 @@ class Game:
 def drawBlock(window, x, y, block):
     window.create_rectangle(x, y, x + 20, y + 40, fill=colors[block])
 
+def drawKeyboardShortcuts(window):
+    window.create_text(560, 0, text="Red: r\nBlue: b\nWhite: w\nPlus block: p\nUndo: z", anchor="ne")
+
 def onKeyPress(event):
     if (event.char in charKeyMap):
         window.delete("all")
         game.processMove(charKeyMap[event.char])
         game.drawState(window)
-    window.create_text(560, 0, text="Red: r\nBlue: b\nWhite: w\nPlus block: p\nUndo: z", anchor="ne")
+    drawKeyboardShortcuts(window)
 
 game = Game()
 root = Tk()
@@ -118,6 +121,6 @@ window.pack()
 
 root.bind("<KeyPress>", onKeyPress)
 root.wm_title("Threes Companion")
-window.create_text(560, 0, text="Red: r\nBlue: b\nWhite: w\nPlus block: p\nUndo: z", anchor="ne")
+drawKeyboardShortcuts(window)
 os.system('''/usr/bin/osascript -e 'tell app "Finder" to set frontmost of process "Python" to true' ''')
 root.mainloop()
