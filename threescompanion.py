@@ -2,6 +2,9 @@
 # -*- coding: utf-8 -*-
 from Tkinter import *
 import os
+import multiprocessing
+from soundplayer import playSound
+import soundlistener
 
 charKeyMap = {"r": "Red", "b": "Blue", "w": "White", "p": "Plus", "i": "Increment", "z": "Undo"}
 baseBlocks = {"Red", "Blue", "White"}
@@ -29,6 +32,14 @@ class Game:
     def resetColors(self):
         self.baseBlockCount = {"Red": 4, "Blue": 4, "White": 4}
     
+    def processIncrement(self):
+        self.lastMoves.insert(0, "Increment")
+        self.lastMoves.pop()
+        
+        self.incrementCount += 1
+        self.incrementBaseBlocks()
+        playSound()
+    
     def processMove(self, key):
         if key in baseBlocks:
             if self.baseBlockCount[key] == 0: # Invalid input, you've found more than 4 of this block in this batch
@@ -39,11 +50,7 @@ class Game:
                 self.lastMoves[0] = key
             
         elif key == "Increment":            
-            self.lastMoves.insert(0, "Increment")
-            self.lastMoves.pop()
-            
-            self.incrementCount += 1
-            self.incrementBaseBlocks()
+            self.processIncrement()
             
         elif key == "Plus":
             if self.recordLast(key):
@@ -139,21 +146,35 @@ def drawBlock(window, x, y, block):
 def drawKeyboardShortcuts(window):
     window.create_text(560, 0, text="Red: r\nBlue: b\nWhite: w\nIncrement: i\nPlus block: p\nUndo: z", anchor="ne")
 
-def onKeyPress(event):
-    if (event.char in charKeyMap):
-        window.delete("all")
-        game.processMove(charKeyMap[event.char])
-        game.drawState(window)
-    drawKeyboardShortcuts(window)
+class Window:
+    def __init__(self, game):
+        self.game = game
+        self.root = Tk()
+        self.window = Canvas(self.root, width=570, height=290)
+        self.window.pack()
+        self.root.bind("<KeyPress>", self.onKeyPress)
+        self.root.wm_title("Threes Companion")
+        drawKeyboardShortcuts(self.window)
 
-game = Game()
-root = Tk()
+    def onKeyPress(self, event):
+        if (event.char in charKeyMap):
+            self.window.delete("all")
+            self.game.processMove(charKeyMap[event.char])
+            self.game.drawState(self.window)
+        drawKeyboardShortcuts(self.window)
 
-window = Canvas(root, width=570, height=290)
-window.pack()
+    def start(self):
+        os.system('''/usr/bin/osascript -e 'tell app "Finder" to set frontmost of process "Python" to true' ''')
+        self.root.mainloop()
+        print "Finished"
 
-root.bind("<KeyPress>", onKeyPress)
-root.wm_title("Threes Companion")
-drawKeyboardShortcuts(window)
-os.system('''/usr/bin/osascript -e 'tell app "Finder" to set frontmost of process "Python" to true' ''')
-root.mainloop()
+if __name__ == "__main__":
+    game = Game()
+    
+    multiprocessing.Process(target=soundlistener.start,args=[game]).start()
+    
+    window = Window(game).start()
+
+    
+    
+    
