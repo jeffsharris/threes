@@ -1,14 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from Tkinter import *
 import os
-import multiprocessing
 from soundplayer import playSound
 import soundlistener
+from termcolor import colored, cprint
 
-charKeyMap = {"r": "Red", "b": "Blue", "w": "White", "p": "Plus", "i": "Increment", "z": "Undo"}
+charKeyMap = {"'r'": "Red", "'b'": "Blue", "'w'": "White", "'p'": "Plus", "'i'": "Increment", "'z'": "Undo"}
 baseBlocks = {"Red", "Blue", "White"}
-colors = {"Red": "#FF6780", "Blue": "#66CBFF", "White": "#F8F8F8", "Played": "#111111", "Unplayed": "#EEEEEE", "Plus": "#FBCC67", "Increment": "#999999"}
+colors = {"Red": "red", "Blue": "blue", "White": "white", "Played": "blue", "Unplayed": "grey", "Plus": "yellow", "Increment": "grey"}
 
 class Game:
     def __init__(self):
@@ -38,7 +37,12 @@ class Game:
         
         self.incrementCount += 1
         self.incrementBaseBlocks()
+        self.printState()
         playSound()
+        
+    def processKey(self, key):
+        if (key in charKeyMap):
+            self.processMove(charKeyMap[key])
     
     def processMove(self, key):
         if key in baseBlocks:
@@ -56,10 +60,13 @@ class Game:
             if self.recordLast(key):
                 self.foundPlus = True
                 self.lastPlus = self.moves % 21
+                self.moves -= 1
             self.recordLast(key)
             
         elif key == "Undo":
             self.undo()
+            
+        self.printState()
             
     def incrementBaseBlocks(self):
         self.moves += 1
@@ -91,24 +98,23 @@ class Game:
             self.lastMoves.append(None)
         
         
-    def drawBaseBlocks(self, window, y):
-        window.create_text(10, y, text="Upcoming base blocks:", anchor="nw")
+    def printBaseBlocks(self):
+        print "Upcoming base blocks:"
         blockCount = 0
         if self.incrementCount > 0: # We only show moves if all the blocks in this batch are known
-            s = str(12 - (self.colorCount % 12)) + " moves left in this batch"
-            window.create_text(10, y+20, text=s, anchor="nw")
+            print str(12 - (self.colorCount % 12)) + " moves left in this batch\n"
             return
         
         for color in baseBlocks:
             for i in range(0, self.baseBlockCount[color]):
-                drawBlock(window, 10 + 25*blockCount, y + 20, color)
+                printBlock(color)
                 blockCount += 1
+        print "\n"
                 
-    def drawPlusBlocks(self, window, y):
-        window.create_text(10, y, text="Plus block:", anchor="nw")
+    def printPlusBlocks(self):
+        print "Plus block:"
         if self.moves < 21: # The first 21 moves have a grace period where no plus blocks appear
-            s = str(21 - self.moves) + " moves left in grace period"
-            window.create_text(10, y+20, text=s, anchor="nw")
+            print str(21 - self.moves) + " moves left in grace period\n"
             return
         
         offset = 0
@@ -116,64 +122,43 @@ class Game:
             offset = 1
                         
         for i in range (0, self.moves % 21 + offset):
-            drawBlock(window, 10 + 25 * i, y + 20, "Played")
+            if self.foundPlus & ((i + 1) == self.lastPlus):
+                printBlock("Plus")
+            else:
+                printBlock("Played")
         for i in range (self.moves % 21 + offset, 22):
-            drawBlock(window, 10 + 25 * i, y + 20, "Unplayed")
-        
-        if self.foundPlus:
-            drawBlock(window, 10 + 25 * self.lastPlus, y + 20, "Plus")
+            printBlock("Unplayed")
+        print "\n"
             
-    def drawLastBlocks(self, window, y):
-        window.create_text(10, y, text="Last blocks:", anchor="nw")
+    def printLastBlocks(self):
+        print "Last blocks:"
         for i in range(0, len(self.lastMoves)):
             if self.lastMoves[i] == None:
+                print "\n"
                 return
-            drawBlock(window, 10 + 25 * i, y + 20, self.lastMoves[i])
+            printBlock(self.lastMoves[i])
+        print "\n"
     
-    def drawMoveCount(self, window, y):
-        s = "Move count: " + str(self.moves)
-        window.create_text(10, y, text=s, anchor="nw")
+    def printMoveCount(self):
+        print "Move count: " + str(self.moves)
     
-    def drawState(self, window):
-        self.drawMoveCount(window, 10)
-        self.drawLastBlocks(window, 30)
-        self.drawBaseBlocks(window, 110)
-        self.drawPlusBlocks(window, 190)
+    def printState(self):
+        os.system('cls' if os.name == 'nt' else 'clear')
+        self.printMoveCount()
+        self.printLastBlocks()
+        self.printBaseBlocks()
+        self.printPlusBlocks()
 
-def drawBlock(window, x, y, block):
-    window.create_rectangle(x, y, x + 20, y + 40, fill=colors[block])
+def printBlock(block):
+    cprint("  ", colors[block], "on_" + colors[block],end=''),
+    print(" "),
 
 def drawKeyboardShortcuts(window):
     window.create_text(560, 0, text="Red: r\nBlue: b\nWhite: w\nIncrement: i\nPlus block: p\nUndo: z", anchor="ne")
 
-class Window:
-    def __init__(self, game):
-        self.game = game
-        self.root = Tk()
-        self.window = Canvas(self.root, width=570, height=290)
-        self.window.pack()
-        self.root.bind("<KeyPress>", self.onKeyPress)
-        self.root.wm_title("Threes Companion")
-        drawKeyboardShortcuts(self.window)
-
-    def onKeyPress(self, event):
-        if (event.char in charKeyMap):
-            self.window.delete("all")
-            self.game.processMove(charKeyMap[event.char])
-            self.game.drawState(self.window)
-        drawKeyboardShortcuts(self.window)
-
-    def start(self):
-        os.system('''/usr/bin/osascript -e 'tell app "Finder" to set frontmost of process "Python" to true' ''')
-        self.root.mainloop()
-        print "Finished"
-
 if __name__ == "__main__":
     game = Game()
-    
-    multiprocessing.Process(target=soundlistener.start,args=[game]).start()
-    
-    window = Window(game).start()
+    listener = soundlistener.SoundListener(game).listen()
 
     
     

@@ -8,103 +8,109 @@ This is the callback (non-blocking) version.
 import pyaudio
 import audioop
 import time
-import wave
-import sys
+import threescompanion
+import termios, fcntl, sys, os # used for reading key input from terminal
 
 WIDTH = 2
 CHANNELS = 2
 RATE = 44100
 
-p = pyaudio.PyAudio()
-
-soundLength = 0
-moveCount = 0
-prevSoundValue = 0
-peakReached = False
-timeSinceSilence = 0
-timeSinceLastMove = 0
-
-def playSound():
-    CHUNK = 1024
-
-    audio = wave.open('Ping.wav', 'rb')
-    
-    p = pyaudio.PyAudio()
-    
-    def playCallback(in_data, frame_count, time_info, status):
-        data = audio.readframes(frame_count)
-        return (data, pyaudio.paContinue)
-
-    stream = p.open(format=p.get_format_from_width(audio.getsampwidth()),
-                    channels=audio.getnchannels(),
-                    rate=audio.getframerate(),
-                    output_device_index=2,
-                    output=True,
-                    stream_callback=playCallback)
-
-    stream.start_stream()
-
-    while stream.is_active():
-        time.sleep(0.1)
-
-    stream.stop_stream()
-    stream.close()
-    audio.close()
-
-    p.terminate()
-
-def moveCheck(timeSinceSilence, data):
-    global moveCount
-    global timeSinceLastMove
-    if (data < 300) & (timeSinceSilence < 13) & (timeSinceSilence > 6) & (timeSinceLastMove > 15):
-        moveCount += 1
-        timeSinceLastMove = 0
-        print "******* Move " + str(moveCount) + " detected"
-        playSound()
-
-def callback(in_data, frame_count, time_info, status):
-    global timeSinceSilence
-    global prevSoundValue
-    global peakReached
-    global timeSinceLastMove
-    
-    data = audioop.rms(in_data, 2)
-    if (data == 0 & (timeSinceLastMove == 0)) | (data > 0):
-        print str(data) + "  " + str(peakReached) + " " + str(timeSinceSilence)
-    if data > prevSoundValue:
-        timeSinceSilence += 1
-        if peakReached:
-            peakReached = False
-            moveCheck(timeSinceSilence, data)
+class SoundListener:
+    def __init__(self, game):
+        self.game = game
+        self.soundLength = 0
+        self.moveCount = 0
+        self.prevSoundValue = 0
+        self.peakReached = False
+        self.timeSinceSilence = 0
+        self.timeSinceLastMove = 0
         
-    if data < prevSoundValue:
-        timeSinceSilence += 1
-        if not peakReached:
-            peakReached = True
-    
-    if (data == 0):
-        moveCheck(timeSinceSilence, prevSoundValue)
-        timeSinceSilence = 0
-        peakReached = False
-    
-    timeSinceLastMove += 1
-    prevSoundValue = data
-    return (in_data, pyaudio.paContinue)
+        self.p = pyaudio.PyAudio()
+        
+        self.fd = sys.stdin.fileno()
 
-stream = p.open(format=p.get_format_from_width(WIDTH),
+        self.oldterm = termios.tcgetattr(self.fd)
+        self.newattr = termios.tcgetattr(self.fd)
+        self.newattr[3] = self.newattr[3] & ~termios.ICANON & ~termios.ECHO
+        termios.tcsetattr(self.fd, termios.TCSANOW, self.newattr)
+
+        self.oldflags = fcntl.fcntl(self.fd, fcntl.F_GETFL)
+        fcntl.fcntl(self.fd, fcntl.F_SETFL, self.oldflags | os.O_NONBLOCK)
+
+    def moveCheck(self, data):
+        if (data < 300) & (self.timeSinceSilence < 13) & (self.timeSinceSilence > 6) & (self.timeSinceLastMove > 15):
+            self.moveCount += 1
+            self.timeSinceLastMove = 0
+            print "******* Move " + str(self.moveCount) + " detected"
+            self.game.processIncrement()
+            print "Done"
+
+
+    def findAudioChannel(self):
+        for i in range(0, self.p.get_device_count()):
+            if self.p.get_device_info_by_index(i)["name"] == "Soundflower (2ch)":
+                print "Channel " + str(i)
+                return i
+        return None
+
+    def listenCallback(self, in_data, frame_count, time_info, status):
+        data = audioop.rms(in_data, 2)
+        #if (data == 0 & (self.timeSinceLastMove == 0)) | (data > 0):
+            #print str(data) + "  " + str(self.peakReached) + " " + str(self.timeSinceSilence)
+        if data > self.prevSoundValue:
+            self.timeSinceSilence += 1
+            if self.peakReached:
+                self.peakReached = False
+                self.moveCheck(data)
+        
+        if data < self.prevSoundValue:
+            self.timeSinceSilence += 1
+            if not self.peakReached:
+                self.peakReached = True
+    
+        if (data == 0):
+            self.moveCheck(self.prevSoundValue)
+            self.timeSinceSilence = 0
+            self.peakReached = False
+    
+        self.timeSinceLastMove += 1
+        self.prevSoundValue = data
+        return (in_data, pyaudio.paContinue)
+
+
+    def listen(self):
+        channel = self.findAudioChannel()
+        stream = self.p.open(format=self.p.get_format_from_width(WIDTH),
                 channels=CHANNELS,
                 rate=RATE,
                 input=True,
                 output=False,
-                input_device_index=3,
-                stream_callback=callback)
+                input_device_index=channel,
+                stream_callback=self.listenCallback)
+        
 
-stream.start_stream()
+        stream.start_stream()
 
-while stream.is_active():
-    time.sleep(0.1)
+        try:
+            while stream.is_active():
+                self.tryToFindKey()
+                time.sleep(0.1)
+        finally:
+            termios.tcsetattr(self.fd, termios.TCSAFLUSH, self.oldterm)
+            fcntl.fcntl(self.fd, fcntl.F_SETFL, self.oldflags)
 
-stream.stop_stream()
-stream.close()
-
-p.terminate()
+        stream.stop_stream()
+        stream.close()
+        
+    def close(self):
+        self.p.terminate()
+        
+    def tryToFindKey(self):
+        try:
+            c = sys.stdin.read(1)
+            self.game.processKey(repr(c))
+        except IOError: pass
+        
+def start(game):
+    listener = SoundListener(game)
+    listener.listen()   
